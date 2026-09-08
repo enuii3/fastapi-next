@@ -17,5 +17,8 @@
     }
   },
   "packageManager": "pnpm@12.3.4",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "orval": "^8.29.0"
+  }
 }
