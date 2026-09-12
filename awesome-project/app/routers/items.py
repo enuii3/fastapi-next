@@ -1,26 +1,52 @@
 from enum import Enum
-from fastapi import FastAPI, Body, Cookie, Response
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import (
+    Body,
+    Cookie,
+    Response,
+    status,
+    File,
+    UploadFile,
+    HTTPException,
+    APIRouter,
+    Path,
+)
+from fastapi.responses import RedirectResponse
 from pydantic import (
     BaseModel,
     Field,
     HttpUrl,
-    EmailStr,
-    AfterValidator,
 )
 from typing import Annotated, Literal
-from fastapi import FastAPI, Query, Path
-import random
+
+router = APIRouter(
+    prefix="/items",
+    tags=["items"]
+    responses={404: {"description": "Not found"}},
+)
 
 
-class BaseUser(BaseModel):
-    username: str
-    email: EmailStr
-    full_name: str | None = None
+class BaseItem(BaseModel):
+    description: str
+    type: str
 
 
-class UserIn(BaseUser):
-    password: str
+class CartItem(BaseItem):
+    type: str = "car"
+
+
+class PlaneItem(BaseItem):
+    type: str = "plane"
+    size: int
+
+
+plane_cart_items = {
+    "item1": {"description": "A car item", "type": "car"},
+    "item2": {"description": "A plane item", "type": "plane", "size": 10},
+}
+
+
+def fake_password_hasher(raw_password: str):
+    return "supersecret" + raw_password
 
 
 class FilterParams(BaseModel):
@@ -72,11 +98,6 @@ class Offer(BaseModel):
     items: list[Item]
 
 
-class User(BaseModel):
-    username: str
-    full_name: str | None = None
-
-
 class ModelName(str, Enum):
     alexnet = "alexnet"
     resnet = "resnet"
@@ -111,10 +132,36 @@ def check_valid_id(id: str):
     return id
 
 
-app = FastAPI()
+class UnicornException(Exception):
+    def __init__(self, name: str):
+        self.name = name
 
 
-@app.get("/portal", response_model=None)
+@router.get("/exception/{item_id}")
+async def read_exception_item(item_id: int):
+    if item_id == 3:
+        raise HTTPException(status_code=418, detail="Nope, not allowed!")
+    return {"item_id": item_id}
+
+
+@router.get("/unicorns/{name}")
+async def read_unicorn(name: str):
+    if name == "yolo":
+        raise UnicornException(name=name)
+    return {"unicorn_name": name}
+
+
+@router.post("/files/")
+async def create_file(file: Annotated[bytes, File()]):
+    return {"file_size": len(file)}
+
+
+@router.post("/uploadfile/")
+async def create_upload_file(file: UploadFile):
+    return {"filename": file.filename}
+
+
+@router.get("/portal", response_model=None, tags=["portal"])
 async def get_portal(teleport: bool = False) -> Response | dict:
     if teleport:
         return RedirectResponse(url="https://www.youtube.com")
@@ -122,32 +169,18 @@ async def get_portal(teleport: bool = False) -> Response | dict:
     return {"message": "Welcome to the portal!"}
 
 
-@app.get("/pydantic_items/")
+@router.get("/pydantic_items/")
 async def read_pydantic_items(filter_query: Annotated[FilterParams, Query()]):
     return filter_query
 
 
-@app.get("/users/{user_id}/items/{item_id}")
-async def read_user_item_id(
-    user_id: int, item_id: str, q: str | None = None, short: bool = False
-):
-    item = {"item_id": item_id, "owner_id": user_id}
-
-    if q:
-        item.update({"q": q})
-    if not short:
-        item.update({"description": "This is an amazing item2"})
-
-    return item
-
-
-@app.get("/cook")
+@router.get("/cook")
 async def cook(key: Annotated[str | None, Cookie()] = None):
     return {"key": key}
 
 
-@app.get(
-    "/response_items/{item_id}/name",
+@router.get(
+    "/response/{item_id}/name",
     response_model=Item,
     response_model_include={"name", "description"},
 )
@@ -155,8 +188,8 @@ async def read_item_name(item_id: str):
     return items[item_id]
 
 
-@app.get(
-    "/response_items/{item_id}/public",
+@router.get(
+    "/response/{item_id}/public",
     response_model=Item,
     response_model_exclude={"tax"},
 )
@@ -164,8 +197,8 @@ async def read_item_public_data(item_id: str):
     return items[item_id]
 
 
-@app.get(
-    "/response_items/{item_id}", response_model=Item, response_model_exclude_unset=False
+@router.get(
+    "/response/{item_id}", response_model=Item, response_model_exclude_unset=False
 )
 async def read_response_item(item_id: str):
     res_item = items[item_id]
@@ -173,57 +206,7 @@ async def read_response_item(item_id: str):
     return res_item
 
 
-@app.get("/items/")
-async def read_items(
-    x: Annotated[
-        list[str] | None,
-        Query(
-            alias="item-query",
-            title="Query string list",
-            description="desc",
-            min_length=2,
-        ),
-    ],
-    id: Annotated[str | None, AfterValidator(check_valid_id)] = None,
-    # x: Annotated[str | None, Query(min_length=3)],
-    q: Annotated[
-        str | None,
-        Query(min_length=3, max_length=50, pattern="^fix$"),
-        # str | None, Query(min_length=3, max_length=50, pattern="^+*@.*\.com$" )
-    ] = None,
-    a: str | None = Query(deprecated=True, default=None, min_length=3, max_length=50),
-    b: str | None = Query(
-        include_in_schema=False,
-        deprecated=True,
-        default=None,
-        min_length=3,
-        max_length=50,
-    ),
-    skip: int = 0,
-    limit: int = 5,
-) -> list[Item]:
-    # results = {"items": [{"item_id": "Foo"}, {"item_id": "Bar"}]}
-    results = {"items": fake_items_db[skip : skip + limit]}
-
-    if x:
-        results.update({"x": x})
-    if q:
-        results.update({"q": q})
-    if a:
-        results.update({"a": a})
-    if b:
-        results.update({"b": b})
-
-    if id:
-        item = data.get(id)
-    else:
-        id, item = random.choice(list(data.items()))
-        results.update({"id": id, "name": item})
-
-    return results
-
-
-@app.get("/items/{item_id}")
+@router.get("/{item_id}")
 async def read_item(
     *,
     needy: Annotated[str | None, Query(alias="needy")] = None,
@@ -239,7 +222,7 @@ async def read_item(
     return results
 
 
-@app.get("/models/{model_name}")
+@router.get("/models/{model_name}")
 async def read_model(model_name: ModelName):
     if model_name is ModelName.alexnet:
         return {"model_name": model_name, "message": "Deep Learning FTW!"}
@@ -256,37 +239,35 @@ async def read_model(model_name: ModelName):
     return {"model_name": model_name, "message": "have some residuals"}
 
 
-@app.get("/files/{file_path:path}")
+@router.get("/files/{file_path:path}")
 async def read_file(file_path: str):
     return {"file_path": file_path}
 
 
-@app.post("/user/")
-async def create_user(user: UserIn) -> BaseUser:
-    # パスワードを除いたパスワードを返すようにしたい
-    # user_dict = user.model_dump()
-    # user_dict.pop("password", None)
-    # return BaseUser(**user_dict)
-    return user
-
-
-@app.post("/offers/")
+@router.post("/offers/")
 async def create_offer(offer: Offer):
     return offer
 
 
-@app.post("/images/multiple/")
+@router.post("/images/multiple/")
 async def create_multiple_images(images: list[Image]):
     return images
 
 
-# @app.post("/index-weights/")
+# @router.post("/index-weights/")
 # async def create_index_weights(weights: dict[int, float]):
 #     return weights
 
 
-@app.post("/items/", response_model=Item)
+@router.post(
+    "/", response_model=Item, status_code=status.HTTP_201_CREATED
+)
 async def create_item(item: Item) -> Item:
+    """
+    サンプルのコメント
+    - ここにMarkdownでコメントが
+    - 書けるらしい
+    """
     item_dict = item.model_dump()
     if item.tax is not None:
         price_with_tax = item.price + item.tax
@@ -294,7 +275,12 @@ async def create_item(item: Item) -> Item:
     return item
 
 
-@app.put("/items/{item_id}")
+@router.get("/plane_cart/{item_id}", response_model=PlaneItem | CartItem)
+async def read_plane_cart(item_id: str):
+    return plane_cart_items[item_id]
+
+
+@router.put("/{item_id}", tags=["custom"])
 async def update_item(
     *,
     item_id: Annotated[int, Path(title="The ID of the item", gt=0, le=100)],
@@ -346,18 +332,11 @@ async def update_item(
             },
         ),
     ],
-    user: User,
     importance: Annotated[int, Body(gt=20)],
 ):
-    # result = {"item_id": item_id, **item.model_dump()}
-    result = {"item_id": item_id, "item": item, "user": user, "importance": importance}
-    # result = {"item_id": item_id, "item": item, "importance": importance}
-    # result = {"item_id": item_id, "item": item}
+    result = {"item_id": item_id, "item": item, "importance": importance}
 
     if q:
         result.update({"q": q})
-
-    # if item:
-    #     result.update({"item": item})
 
     return result
