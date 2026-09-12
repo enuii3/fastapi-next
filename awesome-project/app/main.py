@@ -1,12 +1,16 @@
-from app.routers import items
-from app.routers import users
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from app.routers.users import UnicornException
 
-app = FastAPI()
+from app.routers import users, items
+from app.routers.users import UnicornException
+from app.dependencies import get_query_token, get_token_header
+
+app = FastAPI(dependencies=[Depends(get_query_token), Depends(get_token_header)])
+
+app.include_router(users.router)
+app.include_router(items.router)
 
 
 @app.exception_handler(UnicornException)

@@ -9,6 +9,7 @@ from fastapi import (
     HTTPException,
     APIRouter,
     Path,
+    Query,
 )
 from fastapi.responses import RedirectResponse
 from pydantic import (
@@ -20,7 +21,7 @@ from typing import Annotated, Literal
 
 router = APIRouter(
     prefix="/items",
-    tags=["items"]
+    tags=["items"],
     responses={404: {"description": "Not found"}},
 )
 
@@ -259,9 +260,7 @@ async def create_multiple_images(images: list[Image]):
 #     return weights
 
 
-@router.post(
-    "/", response_model=Item, status_code=status.HTTP_201_CREATED
-)
+@router.post("/", response_model=Item, status_code=status.HTTP_201_CREATED)
 async def create_item(item: Item) -> Item:
     """
     サンプルのコメント
@@ -280,7 +279,11 @@ async def read_plane_cart(item_id: str):
     return plane_cart_items[item_id]
 
 
-@router.put("/{item_id}", tags=["custom"])
+@router.put(
+    "/{item_id}",
+    tags=["custom"],
+    responses={403: {"description": "Operation forbidden"}},
+)
 async def update_item(
     *,
     item_id: Annotated[int, Path(title="The ID of the item", gt=0, le=100)],
