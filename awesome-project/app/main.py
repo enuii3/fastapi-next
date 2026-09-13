@@ -4,7 +4,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.routers import users, items, depends, auth
+from app.routers import users, items, depends, auth, sqlmodel
 from app.routers.users import UnicornException
 from app.dependencies import get_query_token, get_token_header
 import time
@@ -18,6 +18,7 @@ app.include_router(users.router)
 app.include_router(items.router)
 app.include_router(depends.router)
 app.include_router(auth.router)
+app.include_router(sqlmodel.router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
