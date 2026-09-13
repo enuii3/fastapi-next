@@ -11,6 +11,7 @@ from fastapi import (
     Path,
     Query,
 )
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import RedirectResponse
 from pydantic import (
     BaseModel,
@@ -24,6 +25,8 @@ router = APIRouter(
     tags=["items"],
     responses={404: {"description": "Not found"}},
 )
+
+fake_db = {}
 
 
 class BaseItem(BaseModel):
@@ -255,11 +258,6 @@ async def create_multiple_images(images: list[Image]):
     return images
 
 
-# @router.post("/index-weights/")
-# async def create_index_weights(weights: dict[int, float]):
-#     return weights
-
-
 @router.post("/", response_model=Item, status_code=status.HTTP_201_CREATED)
 async def create_item(item: Item) -> Item:
     """
@@ -343,3 +341,19 @@ async def update_item(
         result.update({"q": q})
 
     return result
+
+
+items = {
+    "foo": {"name": "Foo", "price": 50.2},
+    "bar": {"name": "Bar", "description": "The bartenders", "price": 62, "tax": 20.2},
+    "baz": {"name": "Baz", "description": None, "price": 50.2, "tax": 10.5, "tags": []},
+}
+
+
+@router.put("/jsonable/{id}", response_model=Item)
+def update_jsonable(id: str, item: Item):
+    update_item_encoded = jsonable_encoder(item)
+    items[id] = update_item_encoded
+
+    return update_item_encoded
+    # fake_db[id] = json_compatible_item_data
